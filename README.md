@@ -217,6 +217,10 @@ Bayesian-Tech-Equity-Risk-Lab/
 │   ├── 04_rolling_features.sql
 │   ├── 05_risk_metrics.sql
 │   └── 06_portfolio_inputs.sql
+├── scripts/
+│   ├── 01_build_database.py         # Build DuckDB from data/raw/tech_stocks.csv
+│   ├── 02_run_sql_pipeline.py       # Execute ordered SQL feature pipeline
+│   └── 03_export_processed_features.py # Export processed feature CSV
 ├── src/
 │   ├── config.py                    # Project paths and constants
 │   ├── data_loader.py               # CSV loading and validation helpers
@@ -276,7 +280,24 @@ or the repository-root fallback:
 tech_stocks.csv
 ```
 
-### 5. Run notebooks in order
+### 5. Run the reproducible script pipeline
+
+The command-line scripts rebuild the DuckDB database, execute the SQL feature pipeline, and export the processed modeling feature dataset. The first script expects the raw CSV at `data/raw/tech_stocks.csv`; if you are using the repository-root fallback dataset, copy it into place first:
+
+```bash
+cp tech_stocks.csv data/raw/tech_stocks.csv
+python scripts/01_build_database.py
+python scripts/02_run_sql_pipeline.py
+python scripts/03_export_processed_features.py
+```
+
+Script outputs:
+
+- `scripts/01_build_database.py` creates `data/database/tech_stocks.duckdb`, loads `raw_prices`, runs the cleaning SQL, and prints raw/clean row counts plus the data quality summary.
+- `scripts/02_run_sql_pipeline.py` runs all SQL scripts in filename order and prints row counts for `clean_prices`, `daily_returns`, `rolling_features`, `drawdowns`, `stock_level_risk_summary`, `annual_stock_metrics`, and `portfolio_returns_wide`.
+- `scripts/03_export_processed_features.py` exports `rolling_features` joined with `drawdowns` to `data/processed/tech_stock_features.csv` and prints the output shape and path.
+
+### 6. Run notebooks in order
 
 Open JupyterLab:
 
@@ -330,7 +351,6 @@ This project is intentionally research-oriented and has several limitations:
 Potential extensions include:
 
 - Add automated tests for data validation, SQL pipeline outputs, and risk metric helpers.
-- Add command-line scripts for running the full pipeline outside notebooks.
 - Expand the equity universe and support configurable ticker lists.
 - Incorporate Fama-French factors, rates, market indices, sector ETFs, or macro covariates.
 - Add Bayesian covariance modeling and dynamic correlation models.
