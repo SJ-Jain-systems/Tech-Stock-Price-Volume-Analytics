@@ -2,7 +2,7 @@
 
 A reproducible financial data science project for uncertainty-aware risk modeling and portfolio analysis of large-cap technology equities.
 
-> **This is not a stock price prediction project.** The goal is not to forecast tomorrow's closing price or produce buy/sell signals. The goal is to quantify uncertainty in historical return behavior, downside risk, regime structure, and portfolio trade-offs using SQL feature engineering and Bayesian modeling.
+> **Educational risk-analysis scope.** This project is a descriptive modeling workflow for historical risk estimation, uncertainty-aware analysis, posterior distributions, and educational portfolio comparison. It does not produce trade signals, promise future outcomes, or provide instructions for real capital allocation.
 
 ## 1. Project overview
 
@@ -27,7 +27,7 @@ This project reframes the analysis around risk and uncertainty:
 - **Bayesian hierarchical modeling** shares information across stocks while still allowing stock-specific behavior.
 - **Student-t likelihoods** better accommodate extreme return observations than a simple Gaussian model.
 - **Bayesian downside-risk and regime models** focus directly on adverse outcomes and changing market states.
-- **Bayesian portfolio optimization** propagates posterior uncertainty into portfolio-level decisions.
+- **Bayesian historical allocation experiments** propagate posterior uncertainty into portfolio-level summaries.
 
 ## 3. Dataset description
 
@@ -67,7 +67,7 @@ The project is organized around uncertainty-aware financial research questions:
 3. How noisy are sample average returns, and how much shrinkage is introduced by a Bayesian hierarchical return model?
 4. Which stocks show the highest posterior volatility, downside-risk probability, and tail-risk exposure?
 5. Are there latent return/volatility regimes that help describe market stress and calmer periods?
-6. How do posterior uncertainty and correlation uncertainty affect portfolio optimization results?
+6. How do posterior uncertainty and correlation uncertainty affect educational portfolio comparison results?
 7. Which conclusions are robust under posterior predictive checks, and which are sensitive to model assumptions?
 
 ## 5. Project architecture
@@ -92,7 +92,7 @@ Core layers:
 
 - **Data layer:** CSV loading, schema validation, positive price/volume checks, and DuckDB persistence.
 - **SQL layer:** deterministic feature engineering for adjusted-close returns, rolling windows, drawdowns, downside events, and portfolio panels.
-- **Modeling layer:** Bayesian return, volatility/downside-risk, regime, and portfolio optimization notebooks.
+- **Modeling layer:** Bayesian return, volatility/downside-risk, regime, and historical allocation experiment notebooks.
 - **Reporting layer:** figures, notebook outputs, and final dashboard/report summaries.
 
 ## 6. SQL pipeline
@@ -173,9 +173,9 @@ Primary outputs:
 - Stress-period diagnostics.
 - Visualizations of inferred regime behavior over time.
 
-### Bayesian portfolio optimization
+### Bayesian historical allocation experiment
 
-The portfolio workflow uses posterior draws of return, volatility, and covariance-related quantities to evaluate portfolio trade-offs under uncertainty. Instead of presenting a single optimal portfolio as definitive, it studies distributions of portfolio risk/return outcomes and weight sensitivity.
+The portfolio workflow uses posterior draws of return, volatility, and covariance-related quantities to evaluate portfolio trade-offs under uncertainty. Instead of presenting a single allocation as definitive, it studies distributions of portfolio risk/return outcomes and weight sensitivity for educational portfolio comparison.
 
 Primary outputs:
 
@@ -352,7 +352,7 @@ Expected outputs from a complete project run include:
 - Bayesian posterior summaries for expected returns and volatility.
 - Bayesian downside-risk estimates and uncertainty intervals.
 - Bayesian regime probability visualizations and stress-regime summaries.
-- Bayesian portfolio optimization results with uncertainty-aware risk/return trade-offs.
+- Bayesian historical allocation experiment results with uncertainty-aware risk/return trade-offs.
 - Posterior predictive checks and model diagnostics.
 - Final summary dashboard and report-ready figures under `reports/`.
 
@@ -366,7 +366,7 @@ This project is intentionally research-oriented and has several limitations:
 - Daily OHLCV data does not include intraday risk, order book liquidity, option-implied information, or macroeconomic covariates.
 - Bayesian models depend on prior choices, likelihood assumptions, sampling diagnostics, and convergence quality.
 - Regime models can be sensitive to initialization, number of regimes, and sample period.
-- Portfolio optimization results should be interpreted as scenario and uncertainty analysis, not actionable investment instructions.
+- Historical allocation experiment results should be interpreted as scenario and uncertainty analysis, not actionable investment instructions or real capital allocation guidance.
 - Transaction costs, taxes, slippage, short-sale constraints, and investor-specific objectives may not be fully represented.
 
 ## 14. Future work
@@ -379,10 +379,10 @@ Potential extensions include:
 - Add Bayesian covariance modeling and dynamic correlation models.
 - Compare Student-t models against Gaussian, skewed, and stochastic-volatility alternatives.
 - Improve regime modeling with time-varying transition probabilities.
-- Add transaction-cost-aware and constraint-aware portfolio optimization.
+- Add transaction-cost-aware and constraint-aware historical allocation experiments.
 - Publish a static HTML report or interactive dashboard artifact.
 - Add continuous integration checks for notebook execution and SQL reproducibility.
 
 ## 15. Disclaimer
 
-This project is for educational and research purposes only and is not financial advice. It does not recommend buying, selling, or holding any security. Financial markets involve risk, and historical analysis does not guarantee future results. Always consult a qualified financial professional before making investment decisions.
+This project is for educational and research purposes only. It uses historical price and volume data and does not account for fundamentals, macroeconomic conditions, taxes, transaction costs, liquidity constraints, or individual investor objectives. Nothing in this project should be interpreted as financial advice.

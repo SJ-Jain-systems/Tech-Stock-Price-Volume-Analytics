@@ -16,13 +16,17 @@ execute:
 
 ## Abstract
 
-This project uses SQL feature engineering and Bayesian modeling to study risk and return across a focused universe of large technology equities. The workflow starts with historical OHLCV data, builds return, volatility, drawdown, downside-risk, regime, and portfolio input tables in SQL, and then applies Bayesian models to quantify uncertainty in expected returns, stock-specific volatility, bad-day probabilities, market regimes, and portfolio allocation. Rather than treating historical averages as precise forecasts, the analysis represents return and risk as probability distributions. The result is a more transparent view of tech equity risk: one that distinguishes observed historical performance from the uncertainty surrounding future outcomes.
+This project uses SQL feature engineering and Bayesian modeling to study historical risk and return across a focused universe of large technology equities. The workflow starts with historical OHLCV data, builds return, volatility, drawdown, downside-risk, regime, and portfolio input tables in SQL, and then applies Bayesian models to quantify uncertainty in expected returns, stock-specific volatility, bad-day probabilities, market regimes, and portfolio allocation. Rather than treating historical averages as precise predictions, the analysis represents return and risk as posterior distributions. The result is a more transparent view of tech equity risk: one that distinguishes observed historical performance from uncertainty under the stated data and model assumptions.
+
+## Disclaimer
+
+This project is for educational and research purposes only. It uses historical price and volume data and does not account for fundamentals, macroeconomic conditions, taxes, transaction costs, liquidity constraints, or individual investor objectives. Nothing in this project should be interpreted as financial advice.
 
 ## 1. Introduction
 
 Technology stocks have produced some of the most dramatic wealth creation in public markets, but their returns are also noisy, unstable, and highly sensitive to changing investor expectations. A daily return series can contain long quiet periods, sudden drawdowns, volatility clustering, regime shifts, and extreme observations that dominate conventional summaries.
 
-That creates a measurement problem. Point estimates such as average return, realized volatility, maximum drawdown, and Sharpe ratio are useful, but they can also be misleading when interpreted too literally. A stock with a high historical mean return may have achieved that estimate from a small number of unusually strong days. A portfolio that appears optimal under a single estimated covariance matrix may be fragile if those estimates are uncertain. A bad-day rate measured over one sample period may understate the probability of future stress when market conditions change.
+That creates a measurement problem. Point estimates such as average return, realized volatility, maximum drawdown, and Sharpe ratio are useful, but they can also be misleading when interpreted too literally. A stock with a high historical mean return may have achieved that estimate from a small number of unusually strong days. A portfolio allocation that appears optimal under a single estimated covariance matrix may be fragile if those estimates are uncertain. A bad-day rate measured over one sample period may understate stress risk when market conditions change.
 
 Bayesian methods are well suited to this setting because they make uncertainty explicit. Instead of producing only one expected return or one volatility estimate, a Bayesian model produces posterior distributions over the quantities of interest. These posterior distributions allow the analysis to ask more realistic questions: How uncertain is the expected return for each stock? Which stocks have materially higher downside probability? How often does the market appear to be in a high-volatility state? How stable are portfolio weights once parameter uncertainty is included?
 
@@ -273,14 +277,14 @@ Posterior regime probabilities can be used descriptively to identify dates that 
 
 This is a descriptive mixture model, not a full trading system. It does not include transaction costs, execution rules, position sizing constraints, real-time filtering assumptions, or out-of-sample signal validation. Its purpose is to summarize historical market behavior and provide a probabilistic language for discussing low- and high-volatility periods.
 
-## 8. Bayesian Portfolio Optimization
+## 8. Bayesian Historical Allocation Experiment
 
-The portfolio analysis compares several allocation approaches:
+The portfolio analysis is an educational comparison of several historical allocation approaches:
 
-1. **Equal-weight portfolio.** Each stock receives the same allocation. This is transparent, simple, and avoids estimation error in expected returns and covariance, but it does not explicitly optimize risk or return.
-2. **Traditional mean-variance portfolio.** Weights are chosen using historical estimates of expected returns and the covariance matrix. This approach is theoretically elegant but can be highly sensitive to noisy mean estimates.
-3. **Minimum-volatility portfolio.** Weights are chosen to minimize estimated portfolio variance, often producing a more stable allocation than mean-variance optimization because volatility and covariance are generally easier to estimate than expected returns.
-4. **Bayesian max-Sharpe portfolio.** Weights are optimized using posterior draws of expected returns and risk parameters, allowing allocation uncertainty to flow through the optimization process.
+1. **Equal-weight portfolio.** Each stock receives the same allocation. This is transparent, simple, and avoids estimation error in expected returns and covariance, but it does not explicitly target a risk or return objective.
+2. **Traditional mean-variance allocation.** Weights are chosen using historical estimates of expected returns and the covariance matrix. This approach is theoretically elegant but can be highly sensitive to noisy mean estimates.
+3. **Minimum-volatility allocation.** Weights are chosen to minimize estimated portfolio variance, often producing a more stable historical allocation than mean-variance routines because volatility and covariance are generally easier to estimate than expected returns.
+4. **Bayesian max-Sharpe-style allocation.** Weights are computed using posterior draws of expected returns and risk parameters, allowing allocation uncertainty to flow through the historical allocation experiment.
 
 For a weight vector \(w\), expected return vector \(\mu\), and covariance matrix \(\Sigma\), portfolio return and volatility are
 
@@ -300,9 +304,9 @@ A Sharpe-like objective can be written as
 S_p = \frac{w^\top \mu}{\sqrt{w^\top \Sigma w}}.
 \]
 
-In the Bayesian version, \(\mu\) and \(\Sigma\) are not fixed inputs. They are uncertain quantities represented by posterior draws. For each posterior draw \(s\), the optimizer receives \(\mu^{(s)}\) and \(\Sigma^{(s)}\), producing a corresponding optimal weight vector \(w^{(s)}\). The collection of \(w^{(s)}\) values forms a posterior distribution over allocation weights.
+In the Bayesian version, \(\mu\) and \(\Sigma\) are not fixed inputs. They are uncertain quantities represented by posterior draws. For each posterior draw \(s\), the allocation routine receives \(\mu^{(s)}\) and \(\Sigma^{(s)}\), producing a corresponding weight vector \(w^{(s)}\). The collection of \(w^{(s)}\) values forms a posterior distribution over allocation weights.
 
-This propagation of uncertainty is the main advantage of the Bayesian approach. It shows not only which allocation looks best under the model, but also how stable that allocation is. If a stock receives a high weight in some posterior draws and a low weight in others, the model is signaling allocation uncertainty rather than false precision.
+This propagation of uncertainty is the main advantage of the Bayesian approach. It shows how a model-selected historical allocation varies across posterior draws, rather than treating any one allocation as definitive. If a stock receives a high weight in some posterior draws and a low weight in others, the model is signaling allocation uncertainty rather than false precision.
 
 ## 9. Results
 
@@ -340,9 +344,9 @@ Final tables and figures will be inserted after the notebooks generate report-re
 - **Table placeholder:** posterior summaries for low- and high-volatility regime parameters.
 - **Figure placeholder:** regime probability over major drawdown periods.
 
-### 9.6 Portfolio optimization results
+### 9.6 Historical allocation experiment results
 
-- **Table placeholder:** equal-weight, traditional mean-variance, minimum-volatility, and Bayesian max-Sharpe portfolio weights.
+- **Table placeholder:** equal-weight, traditional mean-variance, minimum-volatility, and Bayesian max-Sharpe-style allocation weights.
 - **Table placeholder:** expected portfolio return, volatility, and Sharpe-like ratio by allocation method.
 - **Figure placeholder:** posterior distribution of Bayesian portfolio weights.
 - **Figure placeholder:** risk-return comparison across portfolio methods.
@@ -358,7 +362,7 @@ This lab is intentionally focused and should be interpreted with clear limitatio
 - It does not model transaction costs, bid-ask spreads, market impact, slippage, or borrow costs.
 - It does not incorporate taxes or account-specific constraints.
 - It does not use live data or real-time execution assumptions.
-- It does not constitute investment advice.
+- It is an educational historical allocation experiment and should not be used directly for real capital allocation.
 
 The models estimate uncertainty conditional on the data and modeling assumptions. They do not eliminate model risk, structural breaks, survivorship concerns, or the possibility that future market behavior differs materially from the historical sample.
 
@@ -372,8 +376,8 @@ Several extensions would make the project more realistic and informative:
 - Add earnings dates to study event-driven volatility and downside risk around announcements.
 - Add Bayesian dynamic linear models so expected returns, volatility, and factor exposures can evolve through time.
 - Add a Streamlit dashboard for interactive exploration of returns, drawdowns, posterior intervals, regime probabilities, and portfolio weights.
-- Add out-of-sample validation to compare model-implied risk forecasts with subsequent realized outcomes.
-- Add transaction-cost assumptions to evaluate whether portfolio recommendations remain practical after implementation frictions.
+- Add out-of-sample validation to compare model-implied risk estimates with subsequent realized outcomes.
+- Add transaction-cost assumptions to evaluate how educational allocation comparisons change after implementation frictions.
 
 ## 12. Conclusion
 
