@@ -3,24 +3,364 @@ title: "Bayesian Tech Equity Risk Lab"
 format:
   html:
     toc: true
+    toc-depth: 3
+    number-sections: false
     theme: cosmo
 execute:
-  echo: true
+  echo: false
   warning: false
+  message: false
 ---
 
-# Executive Summary
+# Bayesian Tech Equity Risk Lab
 
-This Quarto report will summarize data quality, feature engineering, Bayesian risk modeling, and portfolio findings for the technology equity universe.
+## Abstract
 
-# Data and Methods
+This project uses SQL feature engineering and Bayesian modeling to study risk and return across a focused universe of large technology equities. The workflow starts with historical OHLCV data, builds return, volatility, drawdown, downside-risk, regime, and portfolio input tables in SQL, and then applies Bayesian models to quantify uncertainty in expected returns, stock-specific volatility, bad-day probabilities, market regimes, and portfolio allocation. Rather than treating historical averages as precise forecasts, the analysis represents return and risk as probability distributions. The result is a more transparent view of tech equity risk: one that distinguishes observed historical performance from the uncertainty surrounding future outcomes.
 
-Future sections will describe the raw OHLCV dataset, DuckDB transformations, Bayesian model assumptions, posterior diagnostics, and portfolio construction workflow.
+## 1. Introduction
 
-# Results
+Technology stocks have produced some of the most dramatic wealth creation in public markets, but their returns are also noisy, unstable, and highly sensitive to changing investor expectations. A daily return series can contain long quiet periods, sudden drawdowns, volatility clustering, regime shifts, and extreme observations that dominate conventional summaries.
 
-Future sections will include report-ready figures, uncertainty intervals, risk summaries, and portfolio analytics.
+That creates a measurement problem. Point estimates such as average return, realized volatility, maximum drawdown, and Sharpe ratio are useful, but they can also be misleading when interpreted too literally. A stock with a high historical mean return may have achieved that estimate from a small number of unusually strong days. A portfolio that appears optimal under a single estimated covariance matrix may be fragile if those estimates are uncertain. A bad-day rate measured over one sample period may understate the probability of future stress when market conditions change.
 
-# Conclusions
+Bayesian methods are well suited to this setting because they make uncertainty explicit. Instead of producing only one expected return or one volatility estimate, a Bayesian model produces posterior distributions over the quantities of interest. These posterior distributions allow the analysis to ask more realistic questions: How uncertain is the expected return for each stock? Which stocks have materially higher downside probability? How often does the market appear to be in a high-volatility state? How stable are portfolio weights once parameter uncertainty is included?
 
-Future sections will document practical insights, modeling limitations, and recommended next steps.
+The goal of this lab is not to build a black-box trading signal. It is to build a reproducible risk-analysis pipeline that combines transparent SQL transformations with Bayesian statistical models, then uses the resulting uncertainty estimates to evaluate historical tech equity behavior and portfolio allocation choices.
+
+## 2. Dataset
+
+The raw dataset is `tech_stocks.csv`, a historical price and volume file for seven technology equities:
+
+- Apple Inc. (`AAPL`)
+- Amazon.com, Inc. (`AMZN`)
+- Facebook / Meta Platforms historical ticker (`FB`)
+- Alphabet Inc. (`GOOG`)
+- Microsoft Corporation (`MSFT`)
+- Netflix, Inc. (`NFLX`)
+- NVIDIA Corporation (`NVDA`)
+
+The file contains the following columns:
+
+- `symbol`: stock ticker.
+- `date`: trading date.
+- `open`: opening price.
+- `high`: intraday high price.
+- `low`: intraday low price.
+- `close`: closing price.
+- `close_adjusted`: split- and dividend-adjusted closing price.
+- `volume`: number of shares traded.
+- `split_coefficient`: split adjustment coefficient.
+
+Adjusted close is used for return calculations because it is designed to make the price series economically comparable through corporate actions such as splits and distributions. The unadjusted OHLC fields remain useful for descriptive price and liquidity checks, but the adjusted close is the appropriate basis for historical return measurement.
+
+The stocks do not all have identical date histories. Some securities begin later than others, and missing observations can occur because of listing histories, market holidays, or data coverage differences. The pipeline therefore treats coverage explicitly. Stock-level analyses can use each symbol's available history, while portfolio analyses require aligned return panels so that covariance, correlation, and portfolio weights are estimated from common trading dates.
+
+## 3. SQL Data Pipeline
+
+The SQL pipeline converts raw OHLCV records into model-ready analytical tables. Each stage has a specific purpose: preserve the raw import, clean and standardize prices, compute returns, engineer rolling features, measure risk, and prepare portfolio inputs.
+
+### 3.1 Core tables and views
+
+The main pipeline objects are:
+
+- `raw_prices`: staging table that stores the imported records from `tech_stocks.csv` with minimal transformation.
+- `clean_prices`: cleaned price table with standardized column names, typed dates, adjusted close values, and basic quality filters.
+- `daily_returns`: daily adjusted-close return table, including simple returns, log returns, volume, and dollar volume.
+- `rolling_features`: rolling momentum, volatility, moving-average, and liquidity features by symbol and date.
+- `drawdowns`: running peak and drawdown table used to measure peak-to-trough losses.
+- Annual and stock-level risk metric views: summary tables for annualized returns, annualized volatility, bad-day rates, worst returns, and drawdowns.
+- Portfolio input tables: aligned return panels, wide return matrices, summary inputs, and correlation estimates for portfolio optimization.
+
+### 3.2 Return formulas
+
+Let \(P_{i,t}\) denote the adjusted close for stock \(i\) on date \(t\). The simple daily return is
+
+\[
+r_{i,t}^{simple} = \frac{P_{i,t}}{P_{i,t-1}} - 1.
+\]
+
+The log daily return is
+
+\[
+r_{i,t}^{log} = \log\left(\frac{P_{i,t}}{P_{i,t-1}}\right).
+\]
+
+Simple returns are intuitive for percentage changes and portfolio arithmetic. Log returns are convenient for statistical modeling because they are additive over time and often behave more regularly in probabilistic models.
+
+### 3.3 Rolling volatility
+
+Rolling volatility is computed over fixed trading-day windows. For a window of \(w\) days, the rolling volatility for stock \(i\) at date \(t\) is
+
+\[
+\widehat{\sigma}_{i,t,w} = \operatorname{sd}\left(r_{i,t-w+1}, \ldots, r_{i,t}\right).
+\]
+
+Common windows include 21 trading days for roughly one month, 63 trading days for roughly one quarter, 126 trading days for roughly half a year, and 252 trading days for roughly one year. Annualized rolling volatility can be approximated as
+
+\[
+\widehat{\sigma}^{ann}_{i,t,w} = \widehat{\sigma}_{i,t,w}\sqrt{252}.
+\]
+
+### 3.4 Drawdown
+
+Drawdown measures the percentage decline from the prior running peak in adjusted close. Define the running peak as
+
+\[
+M_{i,t} = \max_{s \le t} P_{i,s}.
+\]
+
+The drawdown is
+
+\[
+D_{i,t} = \frac{P_{i,t}}{M_{i,t}} - 1.
+\]
+
+The maximum drawdown over a sample is the minimum value of \(D_{i,t}\), representing the largest peak-to-trough decline observed in the period.
+
+### 3.5 Annualized metrics
+
+Daily log returns are summarized into annualized metrics using the standard 252-trading-day convention. If \(\bar{r}_{i}\) is the average daily log return and \(s_i\) is the daily standard deviation of log returns, then
+
+\[
+\widehat{\mu}^{ann}_i = 252\bar{r}_{i}
+\]
+
+and
+
+\[
+\widehat{\sigma}^{ann}_i = \sqrt{252}s_i.
+\]
+
+A Sharpe-like ratio is computed as
+
+\[
+\widehat{S}_i = \frac{\widehat{\mu}^{ann}_i}{\widehat{\sigma}^{ann}_i},
+\]
+
+with the important caveat that this version does not subtract a risk-free rate unless a risk-free return series is added.
+
+### 3.6 Bad-day rate
+
+Downside risk is summarized with threshold-based bad-day indicators. For a threshold \(c < 0\), define
+
+\[
+y_{i,t}(c) = \mathbb{1}(r_{i,t}^{simple} \le c).
+\]
+
+The historical bad-day rate is
+
+\[
+\widehat{p}_{i}(c) = \frac{1}{T_i}\sum_{t=1}^{T_i} y_{i,t}(c).
+\]
+
+The pipeline includes bad-day rates for common thresholds such as \(-2\%\) and \(-5\%\). These measures are easy to communicate and connect directly to the Bayesian downside-risk model.
+
+## 4. Exploratory Financial Analysis
+
+The exploratory analysis focuses on the empirical behavior that motivates the Bayesian models.
+
+**Cumulative return.** Cumulative return plots show the growth path implied by reinvested returns. They make long-run compounding visible and help identify whether performance is broad-based or concentrated in particular episodes. For technology stocks, cumulative return paths can differ dramatically across symbols, especially when one company experiences a sustained revaluation or a major business-model transition.
+
+**Volatility clustering.** Financial returns often exhibit volatility clustering: large moves tend to be followed by large moves, and quiet periods tend to be followed by quiet periods. Rolling volatility features help reveal these clusters. This matters because a single full-sample volatility number can hide the fact that risk is time-varying.
+
+**Drawdowns.** Drawdown analysis highlights path-dependent risk. Two stocks can have similar annualized volatility but very different investor experiences if one suffers deeper or longer peak-to-trough losses. Maximum drawdown and drawdown duration are especially important for understanding the psychological and capital-allocation consequences of equity risk.
+
+**Correlations.** Pairwise correlations describe how stocks move together. Correlation is central to portfolio construction because diversification depends not only on individual volatility but also on co-movement. Technology equities often share exposure to broad growth, interest-rate, and market-sentiment factors, so correlation can increase during stress periods when diversification is most needed.
+
+**Downside risk.** Downside measures such as bad-day rates, worst daily returns, and lower-tail behavior complement symmetric volatility estimates. A stock can have attractive average returns and still expose investors to frequent or severe negative return events. The Bayesian downside-risk model formalizes this question by estimating posterior distributions for bad-day probabilities.
+
+## 5. Bayesian Return Model
+
+The return model treats daily stock returns as noisy observations generated from stock-specific return distributions. A Student-t likelihood is used to accommodate heavy tails and outliers:
+
+\[
+r_{i,t} \sim \operatorname{StudentT}(\nu, \mu_i, \sigma_i),
+\]
+
+where:
+
+- \(r_{i,t}\) is the daily log return for stock \(i\) on date \(t\),
+- \(\nu\) is the degrees-of-freedom parameter controlling tail thickness,
+- \(\mu_i\) is the stock-specific expected daily return,
+- \(\sigma_i\) is the stock-specific daily volatility.
+
+The expected returns are modeled hierarchically so that stock-level estimates are partially pooled toward a cross-stock distribution:
+
+\[
+\mu_i \sim \operatorname{Normal}(\mu_{market}, \tau_{\mu}),
+\]
+
+with hyperpriors on \(\mu_{market}\) and \(\tau_{\mu}\). This structure recognizes that each stock has its own return behavior, while also acknowledging that expected daily returns are difficult to estimate precisely and should not be treated as completely unrelated across stocks.
+
+Stock-specific volatility is modeled separately:
+
+\[
+\sigma_i \sim \operatorname{HalfNormal}(\lambda_{\sigma})
+\]
+
+or with another positive-support prior appropriate for daily return scales. The posterior distribution of \(\sigma_i\) captures uncertainty in each stock's volatility, not just the realized sample standard deviation.
+
+The Student-t distribution is used because equity returns are heavy-tailed. A Gaussian likelihood can be overly sensitive to extreme observations and may understate tail risk. The Student-t likelihood assigns more probability to unusually large positive or negative returns, making the model more robust and more realistic for financial data.
+
+## 6. Bayesian Downside-Risk Model
+
+The downside-risk model turns daily returns into binary bad-day indicators. For a chosen threshold \(c\), define
+
+\[
+y_{i,t} = \begin{cases}
+1, & r_{i,t} \le c, \\
+0, & r_{i,t} > c.
+\end{cases}
+\]
+
+The observation model is
+
+\[
+y_{i,t} \sim \operatorname{Bernoulli}(p_i),
+\]
+
+where \(p_i\) is the probability that stock \(i\) experiences a bad day. A hierarchical logistic model estimates these probabilities while allowing partial pooling across stocks:
+
+\[
+\operatorname{logit}(p_i) = \alpha + \text{stock\_effect}_i.
+\]
+
+The intercept \(\alpha\) represents the baseline log-odds of a bad day across the technology universe, while \(\text{stock\_effect}_i\) captures stock-specific deviations from that baseline.
+
+The result is a posterior distribution for each stock's bad-day probability, not just a single historical frequency. These posteriors can answer questions such as:
+
+- Which stocks have the highest probability of a daily loss beyond the threshold?
+- Are differences in bad-day rates large relative to posterior uncertainty?
+- How much shrinkage occurs for stocks with shorter histories or noisier downside observations?
+
+This model is especially useful because downside events are sparse. When the threshold is severe, such as \(-5\%\), historical counts can be small, and posterior uncertainty becomes an essential part of the result.
+
+## 7. Bayesian Regime Model
+
+The regime model describes market-level returns as a mixture of low-volatility and high-volatility states. Let \(r_{m,t}\) be a market or equal-weight technology-universe return on date \(t\). A two-component mixture model can be written as
+
+\[
+r_{m,t} \sim \pi\,\operatorname{Normal}(\mu_{low}, \sigma_{low}) + (1-\pi)\,\operatorname{Normal}(\mu_{high}, \sigma_{high}),
+\]
+
+where:
+
+- \(\pi\) is the probability of the low-volatility regime,
+- \(\mu_{low}\) and \(\sigma_{low}\) describe the low-volatility state,
+- \(\mu_{high}\) and \(\sigma_{high}\) describe the high-volatility state,
+- \(\sigma_{high} > \sigma_{low}\) identifies the stress regime.
+
+Posterior regime probabilities can be used descriptively to identify dates that resemble calm or stressed environments. These probabilities help connect volatility clustering and drawdown periods to a probabilistic regime interpretation.
+
+This is a descriptive mixture model, not a full trading system. It does not include transaction costs, execution rules, position sizing constraints, real-time filtering assumptions, or out-of-sample signal validation. Its purpose is to summarize historical market behavior and provide a probabilistic language for discussing low- and high-volatility periods.
+
+## 8. Bayesian Portfolio Optimization
+
+The portfolio analysis compares several allocation approaches:
+
+1. **Equal-weight portfolio.** Each stock receives the same allocation. This is transparent, simple, and avoids estimation error in expected returns and covariance, but it does not explicitly optimize risk or return.
+2. **Traditional mean-variance portfolio.** Weights are chosen using historical estimates of expected returns and the covariance matrix. This approach is theoretically elegant but can be highly sensitive to noisy mean estimates.
+3. **Minimum-volatility portfolio.** Weights are chosen to minimize estimated portfolio variance, often producing a more stable allocation than mean-variance optimization because volatility and covariance are generally easier to estimate than expected returns.
+4. **Bayesian max-Sharpe portfolio.** Weights are optimized using posterior draws of expected returns and risk parameters, allowing allocation uncertainty to flow through the optimization process.
+
+For a weight vector \(w\), expected return vector \(\mu\), and covariance matrix \(\Sigma\), portfolio return and volatility are
+
+\[
+\mu_p = w^\top \mu
+\]
+
+and
+
+\[
+\sigma_p = \sqrt{w^\top \Sigma w}.
+\]
+
+A Sharpe-like objective can be written as
+
+\[
+S_p = \frac{w^\top \mu}{\sqrt{w^\top \Sigma w}}.
+\]
+
+In the Bayesian version, \(\mu\) and \(\Sigma\) are not fixed inputs. They are uncertain quantities represented by posterior draws. For each posterior draw \(s\), the optimizer receives \(\mu^{(s)}\) and \(\Sigma^{(s)}\), producing a corresponding optimal weight vector \(w^{(s)}\). The collection of \(w^{(s)}\) values forms a posterior distribution over allocation weights.
+
+This propagation of uncertainty is the main advantage of the Bayesian approach. It shows not only which allocation looks best under the model, but also how stable that allocation is. If a stock receives a high weight in some posterior draws and a low weight in others, the model is signaling allocation uncertainty rather than false precision.
+
+## 9. Results
+
+Final tables and figures will be inserted after the notebooks generate report-ready artifacts. Planned outputs include:
+
+### 9.1 Data coverage and quality
+
+- **Table placeholder:** symbol-level date ranges, row counts, missing-value checks, and adjusted-close coverage.
+- **Figure placeholder:** price history by symbol using adjusted close.
+
+### 9.2 Exploratory return and risk results
+
+- **Figure placeholder:** cumulative return paths for all seven stocks.
+- **Figure placeholder:** rolling 21-day, 63-day, and 252-day volatility by symbol.
+- **Figure placeholder:** drawdown curves by symbol.
+- **Table placeholder:** annualized return, annualized volatility, Sharpe-like ratio, maximum drawdown, worst daily return, and bad-day rates.
+- **Figure placeholder:** return correlation heatmap.
+
+### 9.3 Bayesian return model results
+
+- **Table placeholder:** posterior mean and credible intervals for \(\mu_i\), annualized expected return, and \(\sigma_i\).
+- **Figure placeholder:** posterior intervals for stock-level expected returns.
+- **Figure placeholder:** posterior intervals for stock-level volatility.
+- **Diagnostic placeholder:** MCMC trace plots, effective sample sizes, and convergence statistics.
+
+### 9.4 Bayesian downside-risk results
+
+- **Table placeholder:** posterior bad-day probabilities by symbol for selected thresholds.
+- **Figure placeholder:** posterior intervals for \(p_i\) by stock.
+- **Figure placeholder:** comparison of historical bad-day rates and posterior bad-day probabilities.
+
+### 9.5 Bayesian regime results
+
+- **Figure placeholder:** market return series with posterior high-volatility regime probability.
+- **Table placeholder:** posterior summaries for low- and high-volatility regime parameters.
+- **Figure placeholder:** regime probability over major drawdown periods.
+
+### 9.6 Portfolio optimization results
+
+- **Table placeholder:** equal-weight, traditional mean-variance, minimum-volatility, and Bayesian max-Sharpe portfolio weights.
+- **Table placeholder:** expected portfolio return, volatility, and Sharpe-like ratio by allocation method.
+- **Figure placeholder:** posterior distribution of Bayesian portfolio weights.
+- **Figure placeholder:** risk-return comparison across portfolio methods.
+
+## 10. Limitations
+
+This lab is intentionally focused and should be interpreted with clear limitations:
+
+- The analysis uses historical OHLCV data only.
+- It does not include company fundamentals such as revenue, margins, earnings, valuation multiples, or balance-sheet variables.
+- It does not include macroeconomic variables such as interest rates, inflation, unemployment, credit spreads, or monetary policy indicators.
+- It does not include factor exposures such as market, size, value, profitability, investment, momentum, or quality.
+- It does not model transaction costs, bid-ask spreads, market impact, slippage, or borrow costs.
+- It does not incorporate taxes or account-specific constraints.
+- It does not use live data or real-time execution assumptions.
+- It does not constitute investment advice.
+
+The models estimate uncertainty conditional on the data and modeling assumptions. They do not eliminate model risk, structural breaks, survivorship concerns, or the possibility that future market behavior differs materially from the historical sample.
+
+## 11. Future Work
+
+Several extensions would make the project more realistic and informative:
+
+- Add `SPY` and `QQQ` benchmarks to compare individual stocks and portfolios against broad market and technology-heavy index proxies.
+- Add Fama-French factors to separate stock-specific performance from common equity risk premia.
+- Add macro data such as interest rates, inflation, credit spreads, and volatility indexes.
+- Add earnings dates to study event-driven volatility and downside risk around announcements.
+- Add Bayesian dynamic linear models so expected returns, volatility, and factor exposures can evolve through time.
+- Add a Streamlit dashboard for interactive exploration of returns, drawdowns, posterior intervals, regime probabilities, and portfolio weights.
+- Add out-of-sample validation to compare model-implied risk forecasts with subsequent realized outcomes.
+- Add transaction-cost assumptions to evaluate whether portfolio recommendations remain practical after implementation frictions.
+
+## 12. Conclusion
+
+The Bayesian Tech Equity Risk Lab provides a structured way to analyze technology equity risk without pretending that noisy financial estimates are exact. The SQL pipeline creates a transparent foundation: adjusted-close returns, rolling volatility, drawdowns, downside indicators, annual metrics, aligned return panels, and portfolio inputs. The Bayesian models build on that foundation by representing expected returns, volatility, bad-day probabilities, regimes, and portfolio weights as uncertain quantities.
+
+That uncertainty is not a weakness of the analysis; it is the central result. Technology stocks can deliver exceptional returns, but their realized histories are shaped by heavy tails, changing volatility, large drawdowns, and unstable correlations. Bayesian methods make those features visible in a disciplined way. They help distinguish what the data strongly support from what remains uncertain, and they provide a more honest view of return, risk, and allocation than point estimates alone.
+
+The final message of the project is simple: better risk analysis is not about finding a single perfect number. It is about understanding the range of plausible outcomes, the assumptions behind those outcomes, and the uncertainty that remains even after careful modeling.
