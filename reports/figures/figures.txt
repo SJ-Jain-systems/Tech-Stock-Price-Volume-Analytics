@@ -1,0 +1,5 @@
+This folder is reserved for generated project figures.
+
+Figures are created by running the project notebooks and analysis scripts. Generated image files are intentionally not committed to the repository because they can be recreated from the source data and code.
+
+To regenerate figures, run the notebooks or scripts in the project workflow after creating the processed dataset and DuckDB database.
